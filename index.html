@@ -44,7 +44,7 @@
 <body class="bg-meli-dark text-slate-200 font-sans h-screen flex overflow-hidden">
 
     <!-- Loading Screen (Inicial) -->
-    <div id="loading-screen" class="fixed inset-0 bg-meli-dark z-50 flex items-center justify-center">
+    <div id="loading-screen" class="fixed inset-0 bg-meli-dark z-50 flex items-center justify-center transition-opacity duration-500">
         <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-yellow-400"></div>
     </div>
 
@@ -215,34 +215,40 @@
         </div>
     </main>
 
-    <!-- Firebase e Lógica da Aplicação -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, onAuthStateChanged, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
+    <script>
         // Inicializar Icones Lucide
         lucide.createIcons();
 
-        // Variáveis de Ambiente e Firebase
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
-             // Fallback vazio caso seja executado fora do Canvas (não funcionará a bd sem config real)
-        };
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'achei-no-meli-saas';
-        
-        let app, auth, db;
-        try {
-            app = initializeApp(firebaseConfig);
-            auth = getAuth(app);
-            db = getFirestore(app);
-        } catch (e) {
-            console.error("Erro ao inicializar Firebase", e);
-        }
-
-        let currentUser = null;
+        // -----------------------------------------
+        // 1. INICIALIZAÇÃO & ARMAZENAMENTO LOCAL
+        // -----------------------------------------
         let offersList = [];
 
-        // Sistema de Toast (Avisos)
+        // Quando a página carrega, esconde o ecrã de carregamento e lê os dados
+        document.addEventListener('DOMContentLoaded', () => {
+            const loader = document.getElementById('loading-screen');
+            loader.classList.add('opacity-0');
+            setTimeout(() => loader.classList.add('hidden'), 500);
+
+            // Carregar dados guardados no navegador
+            const savedOffers = localStorage.getItem('meli_offers_data');
+            if (savedOffers) {
+                offersList = JSON.parse(savedOffers);
+                // Ordenar por data (mais recentes primeiro)
+                offersList.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+            }
+            renderOffers();
+        });
+
+        // Guardar dados no navegador
+        function saveToStorage() {
+            localStorage.setItem('meli_offers_data', JSON.stringify(offersList));
+            renderOffers();
+        }
+
+        // -----------------------------------------
+        // 2. SISTEMA DE ALERTAS (TOAST)
+        // -----------------------------------------
         window.showToast = function(message, type = 'success') {
             const toast = document.getElementById('toast');
             const msgEl = document.getElementById('toast-message');
@@ -267,12 +273,13 @@
             }, 3000);
         }
 
-        // Trocar Abas (Tabs)
+        // -----------------------------------------
+        // 3. NAVEGAÇÃO DE ABAS
+        // -----------------------------------------
         window.switchTab = function(tabId) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
             document.getElementById(`tab-${tabId}`).classList.remove('hidden');
 
-            // Atualizar UI dos botões
             const activeClassDesk = ['bg-slate-800/80', 'text-yellow-400', 'border-slate-700', 'shadow-sm'];
             const inactiveClassDesk = ['hover:bg-slate-800/50', 'text-slate-400', 'hover:text-slate-200', 'border-transparent'];
             
@@ -284,7 +291,6 @@
             activeBtn.classList.remove(...inactiveClassDesk);
             activeBtn.classList.add(...activeClassDesk);
 
-            // Mobile buttons
             document.querySelectorAll('.mobile-nav-btn').forEach(btn => {
                 btn.classList.remove('bg-slate-800', 'text-yellow-400');
                 btn.classList.add('text-slate-400');
@@ -294,51 +300,9 @@
             mobileBtn.classList.add('bg-slate-800', 'text-yellow-400');
         }
 
-        // Autenticação
-        const initAuth = async () => {
-            if (!auth) return;
-            try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
-            } catch (err) {
-                console.error("Erro na autenticação:", err);
-                showToast("Erro na ligação à conta", "error");
-            }
-        };
-
-        if (auth) {
-            initAuth();
-            onAuthStateChanged(auth, (user) => {
-                if (user) {
-                    currentUser = user;
-                    document.getElementById('loading-screen').classList.add('hidden');
-                    loadOffers();
-                }
-            });
-        }
-
-        // Carregar e Renderizar Ofertas
-        function loadOffers() {
-            if (!currentUser || !db) return;
-
-            const offersRef = collection(db, 'artifacts', appId, 'users', currentUser.uid, 'offers');
-            
-            onSnapshot(offersRef, (snapshot) => {
-                offersList = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                }));
-                offersList.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-                renderOffers();
-            }, (error) => {
-                console.error("Erro ao carregar:", error);
-                showToast("Erro ao carregar dados.", "error");
-            });
-        }
-
+        // -----------------------------------------
+        // 4. RENDERIZAR OFERTAS
+        // -----------------------------------------
         function renderOffers() {
             const container = document.getElementById('offers-container');
             const emptyState = document.getElementById('empty-state');
@@ -359,17 +323,17 @@
                 
                 const imageHtml = offer.imageUrl 
                     ? `<img src="${offer.imageUrl}" alt="Produto" class="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" onerror="this.style.display='none'" />`
-                    : `<i data-lucide="image" class="w-10 h-10 text-slate-600"></i>`;
+                    : `<div class="w-full h-full flex items-center justify-center bg-slate-800"><i data-lucide="image" class="w-10 h-10 text-slate-600"></i></div>`;
 
                 return `
-                <div class="bg-meli-sidebar border border-slate-800 rounded-2xl overflow-hidden hover:border-slate-700 transition-colors shadow-sm group">
-                    <div class="h-48 bg-slate-800 relative overflow-hidden flex items-center justify-center">
+                <div class="bg-meli-sidebar border border-slate-800 rounded-2xl overflow-hidden hover:border-slate-700 transition-colors shadow-sm group flex flex-col">
+                    <div class="h-48 bg-slate-800 relative overflow-hidden flex items-center justify-center flex-shrink-0">
                         ${imageHtml}
                         <div class="absolute top-3 left-3">${statusBadge}</div>
                     </div>
-                    <div class="p-5">
+                    <div class="p-5 flex flex-col flex-1">
                         <h3 class="font-bold text-white text-lg line-clamp-2 mb-2 leading-tight">${offer.title}</h3>
-                        <p class="text-yellow-400 font-black text-2xl mb-5">R$ ${offer.price}</p>
+                        <p class="text-yellow-400 font-black text-2xl mb-5 mt-auto">R$ ${offer.price}</p>
                         
                         <div class="space-y-3">
                             <button onclick="window.copyToWhatsApp('${offer.id}')" class="w-full bg-[#25D366] hover:bg-[#20bd5a] text-white py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#25D366]/20">
@@ -377,7 +341,7 @@
                             </button>
                             
                             <div class="grid grid-cols-2 gap-2">
-                                <button onclick="window.toggleStatus('${offer.id}', '${offer.status}')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm py-2.5 rounded-xl font-medium transition-all">
+                                <button onclick="window.toggleStatus('${offer.id}')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm py-2.5 rounded-xl font-medium transition-all">
                                     ${isSent ? 'Voltar Pendente' : 'Marcar Enviado'}
                                 </button>
                                 <button onclick="window.deleteOffer('${offer.id}')" class="bg-red-500/10 hover:bg-red-500/20 text-red-400 text-sm py-2.5 rounded-xl font-medium transition-all flex justify-center items-center gap-1">
@@ -392,7 +356,9 @@
             lucide.createIcons();
         }
 
-        // Funcionalidade: Varinha Mágica (Auto-fill)
+        // -----------------------------------------
+        // 5. VARINHA MÁGICA (EXTRAÇÃO DE DADOS)
+        // -----------------------------------------
         window.handleAutoFill = async function() {
             const linkInput = document.getElementById('input-link').value;
             const btn = document.getElementById('btn-autofill');
@@ -406,6 +372,7 @@
             btn.innerHTML = `<div class="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>`;
 
             try {
+                // Usa um serviço proxy público para conseguir ler os dados da página do Mercado Livre
                 const response = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(linkInput)}`);
                 const data = await response.json();
                 const html = data.contents;
@@ -436,7 +403,7 @@
                 if (title || price) {
                     showToast("Dados extraídos com sucesso! ✨");
                 } else {
-                    showToast("Não consegui extrair tudo, mas pode preencher manualmente.", "error");
+                    showToast("Não consegui extrair tudo, preencha manualmente.", "error");
                 }
             } catch (error) {
                 console.error(error);
@@ -447,10 +414,11 @@
             }
         };
 
-        // Adicionar Oferta
-        document.getElementById('offer-form').addEventListener('submit', async (e) => {
+        // -----------------------------------------
+        // 6. ADICIONAR, EDITAR E APAGAR
+        // -----------------------------------------
+        document.getElementById('offer-form').addEventListener('submit', (e) => {
             e.preventDefault();
-            if (!currentUser || !db) return;
 
             const btn = document.getElementById('btn-submit');
             const title = document.getElementById('input-title').value;
@@ -461,51 +429,55 @@
             btn.disabled = true;
             btn.innerHTML = `A guardar...`;
 
-            try {
-                await addDoc(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'offers'), {
-                    title, price, affiliateLink, imageUrl,
-                    status: 'Pendente',
-                    createdAt: Date.now()
-                });
-                
-                showToast("Oferta guardada com sucesso!");
-                document.getElementById('offer-form').reset();
-                window.switchTab('list');
-            } catch (error) {
-                console.error(error);
-                showToast("Erro ao guardar oferta.", "error");
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = `Guardar Oferta <i data-lucide="check-circle-2" class="w-5 h-5"></i>`;
-                lucide.createIcons();
-            }
+            // Criar nova oferta
+            const newOffer = {
+                id: Date.now().toString(), // ID único baseado no tempo
+                title, 
+                price, 
+                affiliateLink, 
+                imageUrl,
+                status: 'Pendente',
+                createdAt: Date.now()
+            };
+
+            // Adicionar à lista no topo
+            offersList.unshift(newOffer);
+            
+            // Guardar localmente
+            saveToStorage();
+            
+            showToast("Oferta guardada com sucesso!");
+            document.getElementById('offer-form').reset();
+            window.switchTab('list');
+            
+            btn.disabled = false;
+            btn.innerHTML = `Guardar Oferta <i data-lucide="check-circle-2" class="w-5 h-5"></i>`;
+            lucide.createIcons();
         });
 
-        // Alterar Estado e Apagar
-        window.toggleStatus = async function(id, currentStatus) {
-            if (!currentUser || !db) return;
-            const newStatus = currentStatus === 'Pendente' ? 'Enviado' : 'Pendente';
-            try {
-                await updateDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'offers', id), {
-                    status: newStatus
-                });
+        window.toggleStatus = function(id) {
+            const offerIndex = offersList.findIndex(o => o.id === id);
+            if (offerIndex > -1) {
+                const currentStatus = offersList[offerIndex].status;
+                const newStatus = currentStatus === 'Pendente' ? 'Enviado' : 'Pendente';
+                offersList[offerIndex].status = newStatus;
+                
+                saveToStorage();
                 showToast(`Estado alterado para ${newStatus}`);
-            } catch (error) {
-                showToast("Erro ao alterar estado.", "error");
             }
         };
 
-        window.deleteOffer = async function(id) {
-            if (!currentUser || !db) return;
-            try {
-                await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'offers', id));
+        window.deleteOffer = function(id) {
+            if(confirm("Tem a certeza que deseja apagar esta oferta?")) {
+                offersList = offersList.filter(o => o.id !== id);
+                saveToStorage();
                 showToast("Oferta apagada com sucesso.");
-            } catch (error) {
-                showToast("Erro ao apagar.", "error");
             }
         };
 
-        // Copiar para WhatsApp
+        // -----------------------------------------
+        // 7. COPIAR PARA WHATSAPP
+        // -----------------------------------------
         window.copyToWhatsApp = function(id) {
             const offer = offersList.find(o => o.id === id);
             if (!offer) return;
@@ -521,7 +493,7 @@
                 document.execCommand('copy');
                 showToast("Copiado para o WhatsApp! 🟢");
                 if(offer.status === 'Pendente') {
-                    window.toggleStatus(offer.id, 'Pendente');
+                    window.toggleStatus(offer.id); // Marca como enviado automaticamente
                 }
             } catch (err) {
                 showToast("Erro ao copiar o texto.", "error");
@@ -530,7 +502,7 @@
             document.body.removeChild(textArea);
         };
 
-        // Injectar estilos chave para a animacao de abas
+        // Animação de entrada
         const style = document.createElement('style');
         style.innerHTML = `
             @keyframes fadeIn {
