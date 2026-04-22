@@ -74,6 +74,9 @@
             <button onclick="window.switchTab('add')" id="nav-btn-add" class="nav-btn flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium hover:bg-slate-800/50 text-slate-400 hover:text-slate-200">
                 <i data-lucide="plus" class="w-5 h-5"></i> Nova Oferta
             </button>
+            <button onclick="window.switchTab('settings')" id="nav-btn-settings" class="nav-btn flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium hover:bg-slate-800/50 text-slate-400 hover:text-slate-200">
+                <i data-lucide="settings" class="w-5 h-5"></i> Configurações
+            </button>
         </div>
 
         <div class="mt-auto bg-slate-800/30 p-4 rounded-2xl border border-slate-700/50">
@@ -98,6 +101,7 @@
             <div class="flex gap-2">
                 <button onclick="window.switchTab('list')" id="mobile-btn-list" class="mobile-nav-btn p-2 rounded-lg transition-colors bg-slate-800 text-yellow-400"><i data-lucide="list" class="w-5 h-5"></i></button>
                 <button onclick="window.switchTab('add')" id="mobile-btn-add" class="mobile-nav-btn p-2 rounded-lg transition-colors text-slate-400"><i data-lucide="plus" class="w-5 h-5"></i></button>
+                <button onclick="window.switchTab('settings')" id="mobile-btn-settings" class="mobile-nav-btn p-2 rounded-lg transition-colors text-slate-400"><i data-lucide="settings" class="w-5 h-5"></i></button>
             </div>
         </div>
 
@@ -135,7 +139,7 @@
             <div id="tab-add" class="tab-content hidden animate-[fadeIn_0.3s_ease-in-out] max-w-2xl mx-auto">
                 <div class="mb-8">
                     <h2 class="text-3xl font-black text-white mb-2">Registar Oferta</h2>
-                    <p class="text-slate-400">Adicione os detalhes do produto. Ele ficará disponível no seu painel para publicação.</p>
+                    <p class="text-slate-400">Adicione os detalhes do produto. Ele será enviado automaticamente para a sua Planilha.</p>
                 </div>
 
                 <form id="offer-form" class="bg-meli-sidebar border border-slate-800 p-6 md:p-8 rounded-3xl space-y-6 shadow-sm">
@@ -207,11 +211,42 @@
                             id="btn-submit"
                             class="w-full bg-yellow-400 hover:bg-yellow-500 text-slate-900 py-4 rounded-xl font-black text-lg shadow-xl shadow-yellow-500/10 transition-all flex items-center justify-center gap-2 uppercase tracking-wide disabled:opacity-50"
                         >
-                            Guardar Oferta <i data-lucide="check-circle-2" class="w-5 h-5"></i>
+                            Guardar & Enviar p/ Planilha <i data-lucide="check-circle-2" class="w-5 h-5"></i>
                         </button>
                     </div>
                 </form>
             </div>
+
+            <!-- TAB: CONFIGURAÇÕES -->
+            <div id="tab-settings" class="tab-content hidden animate-[fadeIn_0.3s_ease-in-out] max-w-2xl mx-auto">
+                <div class="mb-8">
+                    <h2 class="text-3xl font-black text-white mb-2">Configurações</h2>
+                    <p class="text-slate-400">Ligue o seu painel à sua Planilha do Google.</p>
+                </div>
+
+                <div class="bg-meli-sidebar border border-slate-800 p-6 md:p-8 rounded-3xl space-y-6 shadow-sm">
+                    <div class="space-y-2">
+                        <label class="text-sm font-bold text-slate-400 uppercase tracking-wider">URL do Web App (Google Apps Script) *</label>
+                        <input 
+                            type="url" 
+                            id="input-webhook"
+                            placeholder="https://script.google.com/macros/s/.../exec"
+                            class="w-full bg-meli-dark border border-slate-700 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-yellow-400 text-white transition-all"
+                        />
+                        <p class="text-xs text-slate-500 mt-1">Cole aqui a URL gerada ao publicar o seu Google Apps Script como Aplicação Web.</p>
+                    </div>
+
+                    <div class="pt-6 mt-8 border-t border-slate-800">
+                        <button 
+                            onclick="window.saveSettings()"
+                            class="w-full bg-slate-800 hover:bg-slate-700 text-white py-4 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-2"
+                        >
+                            Guardar Configurações <i data-lucide="save" class="w-5 h-5"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </main>
 
@@ -224,27 +259,36 @@
         // -----------------------------------------
         let offersList = [];
 
-        // Quando a página carrega, esconde o ecrã de carregamento e lê os dados
         document.addEventListener('DOMContentLoaded', () => {
             const loader = document.getElementById('loading-screen');
             loader.classList.add('opacity-0');
             setTimeout(() => loader.classList.add('hidden'), 500);
 
-            // Carregar dados guardados no navegador
+            // Carregar ofertas
             const savedOffers = localStorage.getItem('meli_offers_data');
             if (savedOffers) {
                 offersList = JSON.parse(savedOffers);
-                // Ordenar por data (mais recentes primeiro)
                 offersList.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
             }
             renderOffers();
+
+            // Carregar Webhook
+            const webhookUrl = localStorage.getItem('meli_webhook_url');
+            if(webhookUrl) {
+                document.getElementById('input-webhook').value = webhookUrl;
+            }
         });
 
-        // Guardar dados no navegador
         function saveToStorage() {
             localStorage.setItem('meli_offers_data', JSON.stringify(offersList));
             renderOffers();
         }
+
+        window.saveSettings = function() {
+            const url = document.getElementById('input-webhook').value;
+            localStorage.setItem('meli_webhook_url', url);
+            showToast("Configurações guardadas!");
+        };
 
         // -----------------------------------------
         // 2. SISTEMA DE ALERTAS (TOAST)
@@ -372,13 +416,23 @@
             btn.innerHTML = `<div class="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>`;
 
             try {
-                // Usa um serviço proxy público para conseguir ler os dados da página do Mercado Livre
-                const response = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(linkInput)}`);
-                const data = await response.json();
-                const html = data.contents;
+                // Novo proxy (codetabs) lida melhor com redirects de links encurtados
+                let response = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(linkInput)}`);
+                let htmlText = await response.text();
 
                 const parser = new DOMParser();
-                const doc = parser.parseFromString(html, "text/html");
+                let doc = parser.parseFromString(htmlText, "text/html");
+
+                // Verifica se há um redirecionamento JS/Meta no HTML (comum em links encurtados do ML)
+                const metaRefresh = doc.querySelector('meta[http-equiv="refresh"]');
+                if (metaRefresh) {
+                    const newUrl = metaRefresh.content.split('url=')[1] || metaRefresh.content.split('URL=')[1];
+                    if (newUrl) {
+                        response = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(newUrl.replace(/'/g, ''))}`);
+                        htmlText = await response.text();
+                        doc = parser.parseFromString(htmlText, "text/html");
+                    }
+                }
 
                 let title = doc.querySelector('meta[property="og:title"]')?.content || '';
                 if (title.includes(' - Mercado')) title = title.split(' - Mercado')[0];
@@ -407,7 +461,7 @@
                 }
             } catch (error) {
                 console.error(error);
-                showToast("Falha ao analisar o link.", "error");
+                showToast("Falha ao analisar o link. Tente manualmente.", "error");
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = `✨ Auto-Preencher`;
@@ -415,9 +469,9 @@
         };
 
         // -----------------------------------------
-        // 6. ADICIONAR, EDITAR E APAGAR
+        // 6. ADICIONAR, ENVIAR À PLANILHA E APAGAR
         // -----------------------------------------
-        document.getElementById('offer-form').addEventListener('submit', (e) => {
+        document.getElementById('offer-form').addEventListener('submit', async (e) => {
             e.preventDefault();
 
             const btn = document.getElementById('btn-submit');
@@ -425,34 +479,52 @@
             const price = document.getElementById('input-price').value;
             const affiliateLink = document.getElementById('input-link').value;
             const imageUrl = document.getElementById('input-image').value;
+            
+            const webhookUrl = localStorage.getItem('meli_webhook_url');
+
+            if (!webhookUrl) {
+                showToast("Por favor, configure a URL da Planilha na aba Configurações primeiro!", "error");
+                return;
+            }
 
             btn.disabled = true;
-            btn.innerHTML = `A guardar...`;
+            btn.innerHTML = `A enviar para Planilha...`;
 
-            // Criar nova oferta
-            const newOffer = {
-                id: Date.now().toString(), // ID único baseado no tempo
-                title, 
-                price, 
-                affiliateLink, 
-                imageUrl,
-                status: 'Pendente',
-                createdAt: Date.now()
-            };
+            try {
+                // Envia os dados para o Google Apps Script
+                await fetch(webhookUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({
+                        title: title,
+                        price: price,
+                        affiliateLink: affiliateLink,
+                        imageUrl: imageUrl
+                    })
+                });
 
-            // Adicionar à lista no topo
-            offersList.unshift(newOffer);
-            
-            // Guardar localmente
-            saveToStorage();
-            
-            showToast("Oferta guardada com sucesso!");
-            document.getElementById('offer-form').reset();
-            window.switchTab('list');
-            
-            btn.disabled = false;
-            btn.innerHTML = `Guardar Oferta <i data-lucide="check-circle-2" class="w-5 h-5"></i>`;
-            lucide.createIcons();
+                // Cria nova oferta no painel local
+                const newOffer = {
+                    id: Date.now().toString(),
+                    title, price, affiliateLink, imageUrl,
+                    status: 'Pendente',
+                    createdAt: Date.now()
+                };
+
+                offersList.unshift(newOffer);
+                saveToStorage();
+                
+                showToast("Guardado e enviado para a Planilha com sucesso!");
+                document.getElementById('offer-form').reset();
+                window.switchTab('list');
+            } catch (error) {
+                console.error(error);
+                showToast("Erro ao comunicar com a Planilha. Verifique a URL.", "error");
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `Guardar & Enviar p/ Planilha <i data-lucide="check-circle-2" class="w-5 h-5"></i>`;
+                lucide.createIcons();
+            }
         });
 
         window.toggleStatus = function(id) {
@@ -493,7 +565,7 @@
                 document.execCommand('copy');
                 showToast("Copiado para o WhatsApp! 🟢");
                 if(offer.status === 'Pendente') {
-                    window.toggleStatus(offer.id); // Marca como enviado automaticamente
+                    window.toggleStatus(offer.id); // Marca como enviado
                 }
             } catch (err) {
                 showToast("Erro ao copiar o texto.", "error");
